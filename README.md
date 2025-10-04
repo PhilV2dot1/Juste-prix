@@ -1,5 +1,7 @@
 # Juste-prix
 
+0x1Da7480FAa4529065794f09b1a8B3755281A14Cb
+
 J'ai créé un contrat complet pour un jeu du Juste Prix ! Voici ses fonctionnalités :
 🎮 Fonctionnalités principales :
 Pour l'organisateur :
