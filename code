@@ -1,0 +1,172 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+/**
+ * @title JustePrix
+ * @dev Jeu du Juste Prix où les joueurs doivent deviner un prix entre 0 et 1000$
+ */
+contract JustePrix {
+    // Structure pour représenter une partie
+    struct Partie {
+        uint256 prixSecret;
+        bool active;
+        address gagnant;
+        uint256 nombreTentatives;
+        uint256 dateDebut;
+    }
+    
+    // Structure pour une tentative
+    struct Tentative {
+        address joueur;
+        uint256 proposition;
+        string resultat; // "trop bas", "trop haut", "gagné"
+        uint256 timestamp;
+    }
+    
+    // Variables d'état
+    address public organisateur;
+    Partie public partieActuelle;
+    Tentative[] public historiqueTentatives;
+    
+    // Mapping pour suivre les statistiques des joueurs
+    mapping(address => uint256) public victoires;
+    mapping(address => uint256) public tentativesTotal;
+    
+    // Événements
+    event NouvellePartie(uint256 indexed numeroPartie, uint256 dateDebut);
+    event Proposition(address indexed joueur, uint256 proposition, string resultat);
+    event Victoire(address indexed gagnant, uint256 prixSecret, uint256 nombreTentatives);
+    
+    // Modificateurs
+    modifier seulementOrganisateur() {
+        require(msg.sender == organisateur, "Seul l'organisateur peut faire cela");
+        _;
+    }
+    
+    modifier partieEnCours() {
+        require(partieActuelle.active, "Aucune partie en cours");
+        _;
+    }
+    
+    /**
+     * @dev Constructeur - définit l'organisateur
+     */
+    constructor() {
+        organisateur = msg.sender;
+    }
+    
+    /**
+     * @dev Démarre une nouvelle partie avec un prix secret
+     * @param _prixSecret Le prix à deviner (entre 0 et 1000)
+     */
+    function demarrerPartie(uint256 _prixSecret) public seulementOrganisateur {
+        require(!partieActuelle.active, "Une partie est deja en cours");
+        require(_prixSecret <= 1000, "Le prix doit etre entre 0 et 1000");
+        
+        partieActuelle = Partie({
+            prixSecret: _prixSecret,
+            active: true,
+            gagnant: address(0),
+            nombreTentatives: 0,
+            dateDebut: block.timestamp
+        });
+        
+        // Réinitialiser l'historique pour la nouvelle partie
+        delete historiqueTentatives;
+        
+        emit NouvellePartie(block.number, block.timestamp);
+    }
+    
+    /**
+     * @dev Permet à un joueur de proposer un prix
+     * @param _proposition Le prix proposé
+     */
+    function proposer(uint256 _proposition) public partieEnCours {
+        require(_proposition <= 1000, "La proposition doit etre entre 0 et 1000");
+        require(partieActuelle.gagnant == address(0), "La partie est terminee");
+        
+        partieActuelle.nombreTentatives++;
+        tentativesTotal[msg.sender]++;
+        
+        string memory resultat;
+        
+        if (_proposition < partieActuelle.prixSecret) {
+            resultat = "C'est plus !";
+        } else if (_proposition > partieActuelle.prixSecret) {
+            resultat = "C'est moins !";
+        } else {
+            resultat = "Gagne !";
+            partieActuelle.gagnant = msg.sender;
+            partieActuelle.active = false;
+            victoires[msg.sender]++;
+            
+            emit Victoire(msg.sender, partieActuelle.prixSecret, partieActuelle.nombreTentatives);
+        }
+        
+        // Enregistrer la tentative
+        historiqueTentatives.push(Tentative({
+            joueur: msg.sender,
+            proposition: _proposition,
+            resultat: resultat,
+            timestamp: block.timestamp
+        }));
+        
+        emit Proposition(msg.sender, _proposition, resultat);
+    }
+    
+    /**
+     * @dev Retourne le nombre de tentatives dans la partie actuelle
+     */
+    function obtenirNombreTentatives() public view returns (uint256) {
+        return historiqueTentatives.length;
+    }
+    
+    /**
+     * @dev Retourne une tentative spécifique
+     * @param index L'index de la tentative
+     */
+    function obtenirTentative(uint256 index) public view returns (
+        address joueur,
+        uint256 proposition,
+        string memory resultat,
+        uint256 timestamp
+    ) {
+        require(index < historiqueTentatives.length, "Index invalide");
+        Tentative memory t = historiqueTentatives[index];
+        return (t.joueur, t.proposition, t.resultat, t.timestamp);
+    }
+    
+    /**
+     * @dev Retourne les statistiques d'un joueur
+     * @param _joueur L'adresse du joueur
+     */
+    function obtenirStatistiques(address _joueur) public view returns (
+        uint256 nombreVictoires,
+        uint256 nombreTentatives
+    ) {
+        return (victoires[_joueur], tentativesTotal[_joueur]);
+    }
+    
+    /**
+     * @dev Annule la partie en cours (urgence)
+     */
+    function annulerPartie() public seulementOrganisateur partieEnCours {
+        partieActuelle.active = false;
+    }
+    
+    /**
+     * @dev Transfère le rôle d'organisateur
+     * @param nouvelOrganisateur L'adresse du nouvel organisateur
+     */
+    function transfererOrganisation(address nouvelOrganisateur) public seulementOrganisateur {
+        require(nouvelOrganisateur != address(0), "Adresse invalide");
+        organisateur = nouvelOrganisateur;
+    }
+    
+    /**
+     * @dev Vérifie si une partie est en cours
+     */
+    function partieActive() public view returns (bool) {
+        return partieActuelle.active;
+    }
+}
